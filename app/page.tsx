@@ -37,6 +37,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription, // <-- ВАЖНО: Добавлено для исправления предупреждения
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -197,7 +198,9 @@ const DailyReportDialog = ({
             </div>
             Внести смену
           </DialogTitle>
-          <p className="text-sm text-zinc-400">Заполните данные по продажам и остаткам за день.</p>
+          <DialogDescription className="text-sm text-zinc-400">
+            Заполните данные по продажам и остаткам за день.
+          </DialogDescription>
         </DialogHeader>
         
         {/* Панель управления */}
@@ -358,7 +361,7 @@ function StoreAnalyticsTable({ data }: { data: StoreSummaryType[] }) {
   )
 }
 
-// --- ВСПОМОГАТЕЛЬНЫЕ ДИАЛОГИ (Zinc Style) ---
+// --- ВСПОМОГАТЕЛЬНЫЕ ДИАЛОГИ (С ИСПРАВЛЕНИЯМИ) ---
 const DashboardDialogs = ({ districts, isAddDistrictOpen, setIsAddDistrictOpen, isAddStoreOpen, setIsAddStoreOpen, isAddProductOpen, setIsAddProductOpen, onSaveDistrict, onSaveStore, onSaveProduct }: any) => {
     const [newDistrictName, setNewDistrictName] = useState("")
     const [newStoreName, setNewStoreName] = useState("")
@@ -374,13 +377,81 @@ const DashboardDialogs = ({ districts, isAddDistrictOpen, setIsAddDistrictOpen, 
     return (
       <>
         <Dialog open={isAddDistrictOpen} onOpenChange={setIsAddDistrictOpen}>
-          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100"><DialogHeader><DialogTitle>Добавить район</DialogTitle></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Название</Label><Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newDistrictName} onChange={e => setNewDistrictName(e.target.value)} /></div></div><DialogFooter><Button onClick={handleSaveDistrict} className="bg-blue-600 hover:bg-blue-500">Сохранить</Button></DialogFooter></DialogContent>
+          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
+            <DialogHeader>
+              <DialogTitle>Добавить район</DialogTitle>
+              {/* Исправление предупреждения: */}
+              <DialogDescription>Введите название нового района для группировки магазинов.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Название</Label>
+                <Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newDistrictName} onChange={e => setNewDistrictName(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleSaveDistrict} className="bg-blue-600 hover:bg-blue-500">Сохранить</Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
+
         <Dialog open={isAddStoreOpen} onOpenChange={setIsAddStoreOpen}>
-          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100"><DialogHeader><DialogTitle>Добавить магазин</DialogTitle></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Район</Label><Select value={newStoreDistrictId} onValueChange={setNewStoreDistrictId}><SelectTrigger className="bg-zinc-900 border-zinc-700 text-zinc-200"><SelectValue placeholder="Район" /></SelectTrigger><SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">{districts.map((d: District) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Название</Label><Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newStoreName} onChange={e => setNewStoreName(e.target.value)} /></div></div><DialogFooter><Button onClick={handleSaveStore} className="bg-blue-600 hover:bg-blue-500">Сохранить</Button></DialogFooter></DialogContent>
+          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
+            <DialogHeader>
+              <DialogTitle>Добавить магазин</DialogTitle>
+              {/* Исправление предупреждения: */}
+              <DialogDescription>Создайте новый магазин и привяжите его к району.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Район</Label>
+                <Select value={newStoreDistrictId} onValueChange={setNewStoreDistrictId}>
+                  <SelectTrigger className="bg-zinc-900 border-zinc-700 text-zinc-200">
+                    <SelectValue placeholder="Район" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                    {districts.map((d: District) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Название</Label>
+                <Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newStoreName} onChange={e => setNewStoreName(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleSaveStore} className="bg-blue-600 hover:bg-blue-500">Сохранить</Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
+
         <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
-          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100"><DialogHeader><DialogTitle>Добавить товар</DialogTitle></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>Название</Label><Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newProductName} onChange={e => setNewProductName(e.target.value)} /></div><div className="grid grid-cols-2 gap-4"><div><Label>Себестоимость</Label><Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newProductCost} onChange={e => setNewProductCost(e.target.value)} /></div><div><Label>Цена</Label><Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newProductSale} onChange={e => setNewProductSale(e.target.value)} /></div></div></div><DialogFooter><Button onClick={handleSaveProduct} className="bg-blue-600 hover:bg-blue-500">Сохранить</Button></DialogFooter></DialogContent>
+          <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
+            <DialogHeader>
+              <DialogTitle>Добавить товар</DialogTitle>
+              {/* Исправление предупреждения: */}
+              <DialogDescription>Заполните параметры нового товара для учета.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Название</Label>
+                <Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newProductName} onChange={e => setNewProductName(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Себестоимость</Label>
+                  <Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newProductCost} onChange={e => setNewProductCost(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Цена</Label>
+                  <Input className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600" value={newProductSale} onChange={e => setNewProductSale(e.target.value)} />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleSaveProduct} className="bg-blue-600 hover:bg-blue-500">Сохранить</Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
       </>
     )
@@ -510,8 +581,8 @@ export default function DashboardPage() {
     }); return Array.from(map.values()).sort((a, b) => b.totalProfit - a.totalProfit)
   }, [filteredMovements, districts, stores])
 
-  const dailyData = useMemo<DailyData[]>(() => {
-    const map = new Map<string, DailyData>()
+  const dailyData = useMemo(() => {
+    const map = new Map<string, { date: string, revenue: number, profit: number }>()
     filteredMovements.forEach(m => {
       const dateKey = format(new Date(m.date), "dd.MM", { locale: ru })
       if (!map.has(dateKey)) map.set(dateKey, { date: dateKey, revenue: 0, profit: 0 })
@@ -547,7 +618,6 @@ export default function DashboardPage() {
     
     try {
       const results = await Promise.all(promises)
-      // Обновляем состояние без перезагрузки
       const newMovements = results.map(m => ({ ...m, date: new Date(m.date) }))
       setMovements(prev => [...newMovements, ...prev])
       alert(`Успешно сохранено операций: ${newMovements.length}`)
