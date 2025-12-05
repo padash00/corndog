@@ -198,9 +198,9 @@ const DailyReportDialog = ({
     new Date().toISOString().slice(0, 10)
   )
   const [storeId, setStoreId] = useState<string>("")
-  const [values, setValues] = useState<
-    Record<string, Record<string, number>>
-  >({})
+  const [values, setValues] = useState<Record<string, Record<string, number>>>(
+    {}
+  )
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -520,10 +520,10 @@ function StoreAnalyticsTable({ data }: { data: StoreSummaryType[] }) {
               <TableHead className="text-right text-zinc-400">
                 Возвраты
               </TableHead>
-              <TableHead className="text-right text-зinc-400">
+              <TableHead className="text-right text-zinc-400">
                 Выручка
               </TableHead>
-              <TableHead className="text-right text-зinc-400">
+              <TableHead className="text-right text-zinc-400">
                 Прибыль
               </TableHead>
             </TableRow>
@@ -532,7 +532,7 @@ function StoreAnalyticsTable({ data }: { data: StoreSummaryType[] }) {
             {data.map((s) => (
               <TableRow
                 key={s.storeId ?? "no-store"}
-                className="border-zinc-800 hover:bg-зinc-800/50"
+                className="border-zinc-800 hover:bg-zinc-800/50"
               >
                 <TableCell className="font-medium text-zinc-200">
                   {s.storeName}
@@ -623,7 +623,7 @@ const DashboardDialogs = ({
             <div>
               <Label>Цена</Label>
               <Input
-                className="bg-zinc-900 border-зinc-700 text-зinc-200 focus-visible:ring-blue-600"
+                className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600"
                 value={newProductSale}
                 onChange={(e) => setNewProductSale(e.target.value)}
               />
@@ -986,9 +986,12 @@ export default function DashboardPage() {
     data: Record<string, Record<string, number>>
   ) => {
     const store = stores.find((s) => s.id === storeId)
-    if (!store) return
+    if (!store) {
+      alert("Магазин не найден")
+      return
+    }
 
-    const promises: Promise<any>[] = []
+    const payloads: any[] = []
 
     Object.entries(data).forEach(([productId, types]) => {
       const product = products.find((p) => p.id === productId)
@@ -996,40 +999,58 @@ export default function DashboardPage() {
 
       Object.entries(types).forEach(([type, qty]) => {
         if (qty > 0) {
-          const payload = {
+          payloads.push({
             date: date.toISOString().slice(0, 10),
             districtId: store.districtId,
             storeId: store.id,
             productId: product.id,
-            operationType: type as any,
+            operationType: type,
+            paymentType: "cash",
             quantity: qty,
             unitPrice: product.salePrice,
             comment: "Ежедневный отчет",
-          }
-          promises.push(
-            fetch("/api/movements", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            }).then((res) => res.json())
-          )
+          })
         }
       })
     })
 
-    if (!promises.length) return
+    if (!payloads.length) {
+      alert("Нет данных для сохранения")
+      return
+    }
 
     try {
-      const results = await Promise.all(promises)
+      const results = await Promise.all(
+        payloads.map(async (payload) => {
+          const res = await fetch("/api/movements", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+
+          const json = await res.json()
+
+          if (!res.ok) {
+            throw new Error(
+              json?.error ||
+                "Ошибка при сохранении операции по движению товара"
+            )
+          }
+
+          return json
+        })
+      )
+
       const newMovements = results.map((m) => ({
         ...m,
         date: new Date(m.date),
       }))
+
       setMovements((prev) => [...newMovements, ...prev])
       alert(`Успешно сохранено операций: ${newMovements.length}`)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
-      alert("Ошибка при сохранении отчета")
+      alert(e.message || "Ошибка при сохранении отчета")
     }
   }
 
@@ -1037,6 +1058,7 @@ export default function DashboardPage() {
     if (!name.trim()) return
     const res = await fetch("/api/products", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
         costPrice: Number(cost),
@@ -1049,6 +1071,9 @@ export default function DashboardPage() {
         [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name))
       )
       setIsAddProductOpen(false)
+    } else {
+      const err = await res.json().catch(() => null)
+      alert(err?.error || "Ошибка при добавлении товара")
     }
   }
 
@@ -1116,7 +1141,7 @@ export default function DashboardPage() {
             </TabsTrigger>
             <TabsTrigger
               value="stores"
-              className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white"
+              className="data-[state=active]:bg-зinc-800 data-[state=active]:text-white"
             >
               По Магазинам
             </TabsTrigger>
