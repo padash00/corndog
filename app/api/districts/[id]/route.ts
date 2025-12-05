@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 
 type RouteContext = { params: { id: string } }
 
-// PUT /api/districts/:id — переименовать район
+// PUT /api/districts/:id — переименование района
 export async function PUT(req: NextRequest, { params }: RouteContext) {
   try {
     const { id } = params
@@ -17,17 +17,17 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
       )
     }
 
-    // КАСТ по text, чтобы не было проблем с uuid
+    // ВАЖНО: явно кастуем параметр к uuid
     const rows = await sql`
       UPDATE districts
       SET name = ${name}
-      WHERE id::text = ${id}
+      WHERE id = ${id}::uuid
       RETURNING id, name
     `
 
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "Район не найден" },
+        { error: `Район не найден в базе (id: ${id})` },
         { status: 404 }
       )
     }
@@ -42,20 +42,20 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
   }
 }
 
-// DELETE /api/districts/:id — удалить район
+// DELETE /api/districts/:id — удаление района
 export async function DELETE(_req: NextRequest, { params }: RouteContext) {
   try {
     const { id } = params
 
     const rows = await sql`
       DELETE FROM districts
-      WHERE id::text = ${id}
+      WHERE id = ${id}::uuid
       RETURNING id
     `
 
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "Район не найден" },
+        { error: `Район не найден в базе (id: ${id})` },
         { status: 404 }
       )
     }
