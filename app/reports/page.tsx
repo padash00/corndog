@@ -72,7 +72,7 @@ type Summary = {
   overallBonusShare: number
 }
 
-// --- BUSINESS LOGIC (та же, что и на дашборде) ---
+// --- BUSINESS LOGIC (как на дашборде) ---
 
 const OP_TYPES = {
   SALE: "sale",
@@ -82,11 +82,12 @@ const OP_TYPES = {
   WRITEOFF: "writeoff",
 } as const
 
-// SALE      -> +выручка, +себестоимость
-// RETURN    -> -выручка, -себестоимость
-// EXCHANGE  -> 0 выручки, +себестоимость
-// BONUS     -> 0 выручки, +себестоимость
-// WRITEOFF  -> 0 выручки, +себестоимость
+// В ЭТОМ отчёте считаем так:
+// SALE      -> +выручка, +себестоимость (маржа по продаже)
+// RETURN    -> -выручка, -себестоимость (отнимаем маржу)
+// EXCHANGE  -> 0 выручки, 0 себестоимости (не трогаем прибыль)
+// BONUS     -> 0 выручки, 0 себестоимости (прибыль не режем, только считаем штуки)
+// WRITEOFF  -> 0 выручки, 0 себестоимости (учёт акций/списаний — отдельно)
 const calculateMovementFinancials = (
   m: Movement,
   products: Product[]
@@ -114,7 +115,7 @@ const calculateMovementFinancials = (
     case OP_TYPES.BONUS:
     case OP_TYPES.WRITEOFF:
       amount = 0
-      costAmount = baseCostAmount
+      costAmount = 0
       break
     default:
       break
@@ -176,8 +177,10 @@ const calculateReportData = (
 
   const finalizeRow = (row: ReportRow) => {
     if (row.salesQty > 0) {
+      // доля проблемных = (возвраты + обмены) / продажи
       row.returnRate = (row.issueQty / row.salesQty) * 100
 
+      // доля бонусов от всего выхода (продажи + обмены + бонусы)
       const totalOut = row.salesQty + row.exchangesQty + row.bonusesQty
       row.bonusShare =
         totalOut > 0 ? (row.bonusesQty / totalOut) * 100 : 0
@@ -471,7 +474,7 @@ export default function ReportsPage() {
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
 
-  // сначала считаем финансы по каждому движению (та же логика, что в дашборде)
+  // считаем финансы по каждому движению
   const movementsWithCalculations = useMemo<MovementWithCalculations[]>(
     () => movements.map((m) => calculateMovementFinancials(m, products)),
     [movements, products]
@@ -576,7 +579,9 @@ export default function ReportsPage() {
               </div>
             </div>
             <div>
-              <div className="text-zinc-500">Прибыль (с учётом обменов/бонусов)</div>
+              <div className="text-zinc-500">
+                Прибыль (только по реальным продажам)
+              </div>
               <div className="text-lg font-semibold text-green-400">
                 {summary.totalProfit.toLocaleString("ru-RU")} ₸
               </div>
@@ -654,7 +659,7 @@ export default function ReportsPage() {
             <Button
               variant="outline"
               onClick={() => setMonth(1)}
-              className="bg-zinc-900 border-зinc-700 text-зinc-300 hover:bg-зinc-800 hover:text-white"
+              className="bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white"
             >
               Прошлый месяц
             </Button>
@@ -677,10 +682,10 @@ export default function ReportsPage() {
         <div className="text-center text-zinc-500 text-sm py-4 border-t border-zinc-900">
           <p className="flex items-center justify-center gap-2">
             <TrendingUp className="h-4 w-4" />
-            Выручка считается только по продажам и возвратам.
-            Обмены, бонусы и списания денег в кассу не приносят, но уменьшают
-            прибыль через себестоимость — поэтому «красивые акции» сразу видно
-            в отчёте.
+            Выручка считается только по продажам и возвратам. Обмены, бонусы и
+            списания денег в кассу не приносят и в прибыль этого отчёта не
+            залезают — здесь мы смотрим именно маржу по платным продажам, а
+            влияние акций видно через колонки «Бонусы» и «Доля бонусов».
           </p>
         </div>
       </div>
