@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react"
 import Link from "next/link"
-import {
-  format,
-  isWithinInterval,
-  startOfDay,
-  endOfDay,
-} from "date-fns"
+import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns"
 import { ru } from "date-fns/locale"
 import {
   LayoutDashboard,
@@ -18,6 +13,7 @@ import {
   ArrowRightLeft,
   CalendarDays,
   Plus,
+  MapPin,
 } from "lucide-react"
 
 // UI
@@ -41,13 +37,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // Dashboard parts
@@ -79,7 +68,6 @@ const OP_TYPES = {
 
 // --- HELPERS ---
 
-// Финансовая логика по каждой операции
 // SALE      -> +выручка, +себестоимость
 // RETURN    -> -выручка, -себестоимость (откат)
 // EXCHANGE  -> 0 выручки, +себестоимость (замена за наш счёт)
@@ -125,6 +113,8 @@ const calculateMovementFinancials = (
     profit: amount - costAmount,
   }
 }
+
+// --- DATA HOOK ---
 
 function useDashboardData() {
   const [districts, setDistricts] = useState<District[]>([])
@@ -181,8 +171,6 @@ function useDashboardData() {
     loading,
     error,
     setMovements,
-    setDistricts,
-    setStores,
     setProducts,
   }
 }
@@ -287,22 +275,18 @@ const DailyReportDialog = ({
           </div>
           <div className="space-y-2">
             <Label className="text-zinc-400 font-medium">Магазин</Label>
-            <Select value={storeId} onValueChange={setStoreId}>
-              <SelectTrigger className="bg-zinc-950 border-zinc-700 hover:border-zinc-600 focus:ring-blue-600 text-zinc-200">
-                <SelectValue placeholder="Выберите точку..." />
-              </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
-                {stores.map((s) => (
-                  <SelectItem
-                    key={s.id}
-                    value={s.id}
-                    className="focus:bg-zinc-800 cursor-pointer"
-                  >
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              className="w-full rounded-md bg-zinc-950 border border-zinc-700 text-zinc-200 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              <option value="">Выберите точку…</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -536,10 +520,10 @@ function StoreAnalyticsTable({ data }: { data: StoreSummaryType[] }) {
               <TableHead className="text-right text-zinc-400">
                 Возвраты
               </TableHead>
-              <TableHead className="text-right text-zinc-400">
+              <TableHead className="text-right text-зinc-400">
                 Выручка
               </TableHead>
-              <TableHead className="text-right text-zinc-400">
+              <TableHead className="text-right text-зinc-400">
                 Прибыль
               </TableHead>
             </TableRow>
@@ -548,7 +532,7 @@ function StoreAnalyticsTable({ data }: { data: StoreSummaryType[] }) {
             {data.map((s) => (
               <TableRow
                 key={s.storeId ?? "no-store"}
-                className="border-zinc-800 hover:bg-zinc-800/50"
+                className="border-zinc-800 hover:bg-зinc-800/50"
               >
                 <TableCell className="font-medium text-zinc-200">
                   {s.storeName}
@@ -587,168 +571,75 @@ function StoreAnalyticsTable({ data }: { data: StoreSummaryType[] }) {
   )
 }
 
-// --- Доп. диалоги (район / магазин / товар) ---
+// --- Dialog только для товара ---
 
 const DashboardDialogs = ({
-  districts,
-  isAddDistrictOpen,
-  setIsAddDistrictOpen,
-  isAddStoreOpen,
-  setIsAddStoreOpen,
   isAddProductOpen,
   setIsAddProductOpen,
-  onSaveDistrict,
-  onSaveStore,
   onSaveProduct,
-}: any) => {
-  const [newDistrictName, setNewDistrictName] = useState("")
-  const [newStoreName, setNewStoreName] = useState("")
-  const [newStoreDistrictId, setNewStoreDistrictId] = useState("")
+}: {
+  isAddProductOpen: boolean
+  setIsAddProductOpen: (open: boolean) => void
+  onSaveProduct: (name: string, cost: string, sale: string) => Promise<void>
+}) => {
   const [newProductName, setNewProductName] = useState("")
   const [newProductCost, setNewProductCost] = useState("")
   const [newProductSale, setNewProductSale] = useState("")
 
-  const handleSaveDistrict = () => {
-    onSaveDistrict(newDistrictName)
-    setNewDistrictName("")
-  }
-  const handleSaveStore = () => {
-    onSaveStore(newStoreName, newStoreDistrictId)
-    setNewStoreName("")
-    setNewStoreDistrictId("")
-  }
-  const handleSaveProduct = () => {
-    onSaveProduct(newProductName, newProductCost, newProductSale)
+  const handleSaveProduct = async () => {
+    await onSaveProduct(newProductName, newProductCost, newProductSale)
     setNewProductName("")
     setNewProductCost("")
     setNewProductSale("")
   }
 
   return (
-    <>
-      <Dialog open={isAddDistrictOpen} onOpenChange={setIsAddDistrictOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
-          <DialogHeader>
-            <DialogTitle>Добавить район</DialogTitle>
-            <DialogDescription>
-              Введите название нового района для группировки магазинов.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Название</Label>
+    <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
+      <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
+        <DialogHeader>
+          <DialogTitle>Добавить товар</DialogTitle>
+          <DialogDescription>
+            Заполните параметры нового товара для учета.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Название</Label>
+            <Input
+              className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600"
+              value={newProductName}
+              onChange={(e) => setNewProductName(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Себестоимость</Label>
               <Input
                 className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600"
-                value={newDistrictName}
-                onChange={(e) => setNewDistrictName(e.target.value)}
+                value={newProductCost}
+                onChange={(e) => setNewProductCost(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Цена</Label>
+              <Input
+                className="bg-zinc-900 border-зinc-700 text-зinc-200 focus-visible:ring-blue-600"
+                value={newProductSale}
+                onChange={(e) => setNewProductSale(e.target.value)}
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button
-              onClick={handleSaveDistrict}
-              className="bg-blue-600 hover:bg-blue-500"
-            >
-              Сохранить
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isAddStoreOpen} onOpenChange={setIsAddStoreOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
-          <DialogHeader>
-            <DialogTitle>Добавить магазин</DialogTitle>
-            <DialogDescription>
-              Создайте новый магазин и привяжите его к району.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Район</Label>
-              <Select
-                value={newStoreDistrictId}
-                onValueChange={setNewStoreDistrictId}
-              >
-                <SelectTrigger className="bg-zinc-900 border-zinc-700 text-zinc-200">
-                  <SelectValue placeholder="Район" />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
-                  {districts.map((d: District) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Название</Label>
-              <Input
-                className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600"
-                value={newStoreName}
-                onChange={(e) => setNewStoreName(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={handleSaveStore}
-              className="bg-blue-600 hover:bg-blue-500"
-            >
-              Сохранить
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 text-zinc-100">
-          <DialogHeader>
-            <DialogTitle>Добавить товар</DialogTitle>
-            <DialogDescription>
-              Заполните параметры нового товара для учета.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Название</Label>
-              <Input
-                className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600"
-                value={newProductName}
-                onChange={(e) => setNewProductName(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Себестоимость</Label>
-                <Input
-                  className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600"
-                  value={newProductCost}
-                  onChange={(e) => setNewProductCost(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Цена</Label>
-                <Input
-                  className="bg-zinc-900 border-zinc-700 text-zinc-200 focus-visible:ring-blue-600"
-                  value={newProductSale}
-                  onChange={(e) => setNewProductSale(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={handleSaveProduct}
-              className="bg-blue-600 hover:bg-blue-500"
-            >
-              Сохранить
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={handleSaveProduct}
+            className="bg-blue-600 hover:bg-blue-500"
+          >
+            Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -756,13 +647,9 @@ const DashboardDialogs = ({
 
 const Header = ({
   onOpenDailyReport,
-  onOpenDistrict,
-  onOpenStore,
   onOpenProduct,
 }: {
   onOpenDailyReport: () => void
-  onOpenDistrict: () => void
-  onOpenStore: () => void
   onOpenProduct: () => void
 }) => {
   return (
@@ -814,36 +701,33 @@ const Header = ({
           >
             <CalendarDays className="h-4 w-4" /> Планы
           </Link>
+          <Link
+            href="/districts"
+            className="hover:text-white transition-colors flex items-center gap-2"
+          >
+            <MapPin className="h-4 w-4" /> Районы
+          </Link>
         </nav>
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 border-r border-zinc-800 pr-3 mr-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenDistrict}
-            className="text-zinc-400 hover:text-white h-8 hover:bg-zinc-800"
-          >
-            + Район
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenStore}
-            className="text-zinc-400 hover:text-white h-8 hover:bg-zinc-800"
-          >
-            + Магазин
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenProduct}
-            className="text-zinc-400 hover:text-white h-8 hover:bg-zinc-800"
-          >
-            + Товар
-          </Button>
-        </div>
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="text-zinc-400 hover:text-white h-8 hover:bg-zinc-800"
+        >
+          <Link href="/districts">Районы и магазины</Link>
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onOpenProduct}
+          className="text-zinc-400 hover:text-white h-8 hover:bg-zinc-800"
+        >
+          + Товар
+        </Button>
 
         <Button
           onClick={onOpenDailyReport}
@@ -860,18 +744,8 @@ const Header = ({
 // --- MAIN PAGE ---
 
 export default function DashboardPage() {
-  const {
-    districts,
-    stores,
-    products,
-    movements,
-    loading,
-    error,
-    setMovements,
-    setDistricts,
-    setStores,
-    setProducts,
-  } = useDashboardData()
+  const { districts, stores, products, movements, loading, error, setMovements, setProducts } =
+    useDashboardData()
 
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined)
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined)
@@ -880,8 +754,6 @@ export default function DashboardPage() {
   const [selectedOperationType, setSelectedOperationType] =
     useState<string>("all")
 
-  const [isAddDistrictOpen, setIsAddDistrictOpen] = useState(false)
-  const [isAddStoreOpen, setIsAddStoreOpen] = useState(false)
   const [isAddProductOpen, setIsAddProductOpen] = useState(false)
   const [isDailyReportOpen, setIsDailyReportOpen] = useState(false)
 
@@ -891,7 +763,7 @@ export default function DashboardPage() {
     [movements, products]
   )
 
-  // --- ФИЛЬТРЫ (дата, район, магазин, тип операции) ---
+  // --- ФИЛЬТРЫ ---
   const filteredMovements = useMemo(
     () =>
       movementsWithCalculations
@@ -1022,7 +894,6 @@ export default function DashboardPage() {
       }
     })
 
-    // проставляем уникальные дни
     map.forEach((item, districtId) => {
       item.uniqueSalesDays = daySets.get(districtId)?.size ?? 0
     })
@@ -1162,36 +1033,6 @@ export default function DashboardPage() {
     }
   }
 
-  const onSaveDistrict = async (name: string) => {
-    if (!name.trim()) return
-    const res = await fetch("/api/districts", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    })
-    if (res.ok) {
-      const newItem = await res.json()
-      setDistricts((prev) =>
-        [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name))
-      )
-      setIsAddDistrictOpen(false)
-    }
-  }
-
-  const onSaveStore = async (name: string, districtId: string) => {
-    if (!name.trim() || !districtId) return
-    const res = await fetch("/api/stores", {
-      method: "POST",
-      body: JSON.stringify({ name, districtId }),
-    })
-    if (res.ok) {
-      const newItem = await res.json()
-      setStores((prev) =>
-        [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name))
-      )
-      setIsAddStoreOpen(false)
-    }
-  }
-
   const onSaveProduct = async (name: string, cost: string, sale: string) => {
     if (!name.trim()) return
     const res = await fetch("/api/products", {
@@ -1228,8 +1069,6 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-zinc-950 text-zinc-100 pb-20">
       <Header
         onOpenDailyReport={() => setIsDailyReportOpen(true)}
-        onOpenDistrict={() => setIsAddDistrictOpen(true)}
-        onOpenStore={() => setIsAddStoreOpen(true)}
         onOpenProduct={() => setIsAddProductOpen(true)}
       />
 
@@ -1237,7 +1076,7 @@ export default function DashboardPage() {
         {/* Фильтры + KPI */}
         <FiltersPanel
           districts={districts}
-          stores={stores}                        // <<< ТЕПЕРЬ ТУТ МАГАЗИНЫ, НЕ []
+          stores={stores}
           dateFrom={dateFrom}
           dateTo={dateTo}
           selectedDistrict={selectedDistrict}
@@ -1321,15 +1160,8 @@ export default function DashboardPage() {
       </div>
 
       <DashboardDialogs
-        districts={districts}
-        isAddDistrictOpen={isAddDistrictOpen}
-        setIsAddDistrictOpen={setIsAddDistrictOpen}
-        isAddStoreOpen={isAddStoreOpen}
-        setIsAddStoreOpen={setIsAddStoreOpen}
         isAddProductOpen={isAddProductOpen}
         setIsAddProductOpen={setIsAddProductOpen}
-        onSaveDistrict={onSaveDistrict}
-        onSaveStore={onSaveStore}
         onSaveProduct={onSaveProduct}
       />
 
