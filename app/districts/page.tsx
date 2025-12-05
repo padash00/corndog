@@ -138,7 +138,10 @@ function useGeoDirectory() {
     )
   }
 
-  const updateStoreDistrict = async (storeId: string, districtId: string | null) => {
+  const updateStoreDistrict = async (
+    storeId: string,
+    districtId: string | null
+  ) => {
     // оптимистично обновляем
     setStores((prev) =>
       prev.map((s) =>
@@ -159,6 +162,28 @@ function useGeoDirectory() {
     }
   }
 
+  const updateStoreName = async (storeId: string, name: string) => {
+    const payload = { name: name.trim() }
+    if (!payload.name) return
+
+    // оптимистично меняем имя
+    setStores((prev) =>
+      prev.map((s) => (s.id === storeId ? { ...s, name: payload.name } : s))
+    )
+
+    const res = await fetch(`/api/stores/${storeId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    if (!res.ok) {
+      // откат, если ошибка
+      await fetchData()
+      throw new Error(await res.text())
+    }
+  }
+
   return {
     districts,
     stores,
@@ -168,6 +193,7 @@ function useGeoDirectory() {
     updateDistrict,
     deleteDistrict,
     updateStoreDistrict,
+    updateStoreName,
   }
 }
 
@@ -413,13 +439,20 @@ const StoresCard = ({
   stores,
   districts,
   onChangeDistrict,
+  onUpdateStoreName,
 }: {
   stores: Store[]
   districts: District[]
-  onChangeDistrict: (storeId: string, districtId: string | null) => Promise<void> | void
+  onChangeDistrict: (
+    storeId: string,
+    districtId: string | null
+  ) => Promise<void> | void
+  onUpdateStoreName: (storeId: string, name: string) => Promise<void> | void
 }) => {
   const [search, setSearch] = useState("")
   const [busyStoreId, setBusyStoreId] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
 
   const districtMap = useMemo(
     () => new Map(districts.map((d) => [d.id, d.name])),
@@ -445,6 +478,31 @@ const StoresCard = ({
       await onChangeDistrict(storeId, districtId)
     } catch (e: any) {
       alert(e.message || "Не удалось обновить магазин")
+    } finally {
+      setBusyStoreId(null)
+    }
+  }
+
+  const startEdit = (store: StoreWithDistrict) => {
+    setEditId(store.id)
+    setEditName(store.name)
+  }
+
+  const cancelEdit = () => {
+    setEditId(null)
+    setEditName("")
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editId) return
+    const name = editName.trim()
+    if (!name) return
+    try {
+      setBusyStoreId(editId)
+      await onUpdateStoreName(editId, name)
+      cancelEdit()
+    } catch (e: any) {
+      alert(e.message || "Не удалось сохранить магазин")
     } finally {
       setBusyStoreId(null)
     }
@@ -477,13 +535,14 @@ const StoresCard = ({
                 <TableHead className="text-zinc-400 w-[260px]">
                   Район
                 </TableHead>
+                <TableHead className="w-[120px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={2}
+                    colSpan={3}
                     className="py-6 text-center text-zinc-500"
                   >
                     Магазинов нет или не найдено
@@ -495,8 +554,17 @@ const StoresCard = ({
                     key={s.id}
                     className="border-zinc-800/70 hover:bg-zinc-900/60"
                   >
-                    <TableCell className="text-zinc-100 font-medium">
-                      {s.name}
+                    <TableCell className="text-zinc-100 font-medium align-middle">
+                      {editId === s.id ? (
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="h-8 bg-zinc-950 border-zinc-700 text-zinc-100"
+                          autoFocus
+                        />
+                      ) : (
+                        s.name
+                      )}
                     </TableCell>
                     <TableCell>
                       <Select
@@ -516,6 +584,44 @@ const StoresCard = ({
                           ))}
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {editId === s.id ? (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-green-400 hover:text-green-300"
+                            onClick={handleSaveEdit}
+                            disabled={busyStoreId === s.id || !editName.trim()}
+                          >
+                            {busyStoreId === s.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Save className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-zinc-500 hover:text-zinc-300"
+                            onClick={cancelEdit}
+                            disabled={busyStoreId === s.id}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-zinc-400 hover:text-zinc-200"
+                          onClick={() => startEdit(s)}
+                          disabled={busyStoreId === s.id}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -547,6 +653,7 @@ export default function DistrictsPage() {
     updateDistrict,
     deleteDistrict,
     updateStoreDistrict,
+    updateStoreName,
   } = useGeoDirectory()
 
   if (loading) {
@@ -606,6 +713,7 @@ export default function DistrictsPage() {
             stores={stores}
             districts={districts}
             onChangeDistrict={updateStoreDistrict}
+            onUpdateStoreName={updateStoreName}
           />
         </div>
       </div>
