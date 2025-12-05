@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 
-type Params = { params: { id: string } }
+type RouteContext = { params: { id: string } }
 
-// PUT /api/districts/:id  — переименовать район
-export async function PUT(req: NextRequest, { params }: Params) {
+// PUT /api/districts/:id — переименование района
+export async function PUT(req: NextRequest, { params }: RouteContext) {
   try {
     const id = params.id
     const body = await req.json()
@@ -33,7 +33,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     return NextResponse.json(rows[0])
   } catch (error) {
-    console.error("PUT /districts/:id error:", error)
+    console.error("PUT /api/districts/[id] error:", error)
     return NextResponse.json(
       { error: "Не удалось обновить район" },
       { status: 500 }
@@ -41,12 +41,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 }
 
-// DELETE /api/districts/:id  — удалить район
-export async function DELETE(_req: NextRequest, { params }: Params) {
+// DELETE /api/districts/:id — удалить район
+export async function DELETE(_req: NextRequest, { params }: RouteContext) {
   try {
     const id = params.id
 
-    // если есть FK, тут можно сначала открепить магазины или доверить это БД
     await sql`
       DELETE FROM districts
       WHERE id = ${id}
@@ -54,7 +53,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error("DELETE /districts/:id error:", error)
+    console.error("DELETE /api/districts/[id] error:", error)
     return NextResponse.json(
       { error: "Не удалось удалить район" },
       { status: 500 }
