@@ -36,7 +36,13 @@ import {
 } from "@/components/ui/table"
 
 // Types
-import type { District, Store, Movement } from "@/lib/types"
+import type {
+  District,
+  Store,
+  Product,
+  Movement,
+  MovementWithCalculations,
+} from "@/lib/types"
 
 // --- TYPES ---
 
@@ -55,15 +61,82 @@ type ReportRow = {
   subLabel?: string
 }
 
-// --- BUSINESS LOGIC ---
+type Summary = {
+  totalRevenue: number
+  totalProfit: number
+  totalSalesQty: number
+  totalIssueQty: number
+  totalBonusesQty: number
+  totalOutQty: number
+  overallReturnRate: number
+  overallBonusShare: number
+}
+
+// --- BUSINESS LOGIC (та же, что и на дашборде) ---
+
+const OP_TYPES = {
+  SALE: "sale",
+  RETURN: "return",
+  EXCHANGE: "exchange",
+  BONUS: "bonus",
+  WRITEOFF: "writeoff",
+} as const
+
+// SALE      -> +выручка, +себестоимость
+// RETURN    -> -выручка, -себестоимость
+// EXCHANGE  -> 0 выручки, +себестоимость
+// BONUS     -> 0 выручки, +себестоимость
+// WRITEOFF  -> 0 выручки, +себестоимость
+const calculateMovementFinancials = (
+  m: Movement,
+  products: Product[]
+): MovementWithCalculations => {
+  const product = products.find((p) => p.id === m.productId)
+  const costPrice = product?.costPrice ?? 0
+  const unitPrice = m.unitPrice
+
+  const baseAmount = m.quantity * unitPrice
+  const baseCostAmount = m.quantity * costPrice
+
+  let amount = 0
+  let costAmount = 0
+
+  switch (m.operationType) {
+    case OP_TYPES.SALE:
+      amount = baseAmount
+      costAmount = baseCostAmount
+      break
+    case OP_TYPES.RETURN:
+      amount = -baseAmount
+      costAmount = -baseCostAmount
+      break
+    case OP_TYPES.EXCHANGE:
+    case OP_TYPES.BONUS:
+    case OP_TYPES.WRITEOFF:
+      amount = 0
+      costAmount = baseCostAmount
+      break
+    default:
+      break
+  }
+
+  return {
+    ...m,
+    amount,
+    costAmount,
+    profit: amount - costAmount,
+  }
+}
+
+// --- ОТЧЁТНЫЕ РАСЧЁТЫ ---
 
 const calculateReportData = (
-  movements: Movement[],
+  movements: MovementWithCalculations[],
   districts: District[],
   stores: Store[],
   dateFrom?: string,
   dateTo?: string
-) => {
+): { districtRows: ReportRow[]; storeRows: ReportRow[]; summary: Summary } => {
   const from = dateFrom ? startOfDay(new Date(dateFrom)) : null
   const to = dateTo ? endOfDay(new Date(dateTo)) : null
 
@@ -75,40 +148,36 @@ const calculateReportData = (
     return true
   })
 
-  const updateRow = (row: ReportRow, m: Movement) => {
-    // --- ВЫРУЧКА ---
-    // только продажи и возвраты
-    let revenuePart = 0
-    if (m.operationType === "sale") {
-      revenuePart = m.quantity * m.unitPrice
-    } else if (m.operationType === "return") {
-      revenuePart = -m.quantity * m.unitPrice
-    }
+  const updateRow = (row: ReportRow, m: MovementWithCalculations) => {
+    // выручка и прибыль уже посчитаны в MovementWithCalculations
+    row.revenue += m.amount
+    row.profit += m.profit
 
-    // себестоимость в этом отчёте не считаем
-    const costPart = 0
-
-    row.revenue += revenuePart
-    row.profit += revenuePart - costPart
-
-    // --- ШТУКИ ---
-    if (m.operationType === "sale") row.salesQty += m.quantity
-    else if (m.operationType === "return") row.returnsQty += m.quantity
-    else if (m.operationType === "exchange") row.exchangesQty += m.quantity
-    else if (m.operationType === "bonus") row.bonusesQty += m.quantity
-
-    // проблемные операции: возвраты + обмены
-    if (m.operationType === "return" || m.operationType === "exchange") {
-      row.issueQty += m.quantity
+    // количественные показатели по типам операций
+    switch (m.operationType) {
+      case OP_TYPES.SALE:
+        row.salesQty += m.quantity
+        break
+      case OP_TYPES.RETURN:
+        row.returnsQty += m.quantity
+        row.issueQty += m.quantity
+        break
+      case OP_TYPES.EXCHANGE:
+        row.exchangesQty += m.quantity
+        row.issueQty += m.quantity
+        break
+      case OP_TYPES.BONUS:
+        row.bonusesQty += m.quantity
+        break
+      default:
+        break
     }
   }
 
   const finalizeRow = (row: ReportRow) => {
     if (row.salesQty > 0) {
-      // доля проблемных = (возвраты + обмены) / продажи
       row.returnRate = (row.issueQty / row.salesQty) * 100
 
-      // доля бонусов от всего "выхода" (продажи + обмены + бонусы)
       const totalOut = row.salesQty + row.exchangesQty + row.bonusesQty
       row.bonusShare =
         totalOut > 0 ? (row.bonusesQty / totalOut) * 100 : 0
@@ -172,7 +241,39 @@ const calculateReportData = (
     .map(finalizeRow)
     .sort((a, b) => b.profit - a.profit)
 
-  return { districtRows, storeRows }
+  // --- Сводный итог по периоду ---
+  const summary: Summary = districtRows.reduce(
+    (acc, row) => {
+      acc.totalRevenue += row.revenue
+      acc.totalProfit += row.profit
+      acc.totalSalesQty += row.salesQty
+      acc.totalIssueQty += row.issueQty
+      acc.totalBonusesQty += row.bonusesQty
+      acc.totalOutQty += row.salesQty + row.exchangesQty + row.bonusesQty
+      return acc
+    },
+    {
+      totalRevenue: 0,
+      totalProfit: 0,
+      totalSalesQty: 0,
+      totalIssueQty: 0,
+      totalBonusesQty: 0,
+      totalOutQty: 0,
+      overallReturnRate: 0,
+      overallBonusShare: 0,
+    }
+  )
+
+  if (summary.totalSalesQty > 0) {
+    summary.overallReturnRate =
+      (summary.totalIssueQty / summary.totalSalesQty) * 100
+  }
+  if (summary.totalOutQty > 0) {
+    summary.overallBonusShare =
+      (summary.totalBonusesQty / summary.totalOutQty) * 100
+  }
+
+  return { districtRows, storeRows, summary }
 }
 
 // --- CUSTOM HOOKS ---
@@ -180,6 +281,7 @@ const calculateReportData = (
 function useReportsData() {
   const [districts, setDistricts] = useState<District[]>([])
   const [stores, setStores] = useState<Store[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [movements, setMovements] = useState<Movement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -187,29 +289,32 @@ function useReportsData() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
-      const [dRes, sRes, mRes] = await Promise.all([
+      const [dRes, sRes, pRes, mRes] = await Promise.all([
         fetch("/api/districts"),
         fetch("/api/stores"),
+        fetch("/api/products"),
         fetch("/api/movements"),
       ])
 
-      if (!dRes.ok || !sRes.ok || !mRes.ok)
+      if (!dRes.ok || !sRes.ok || !pRes.ok || !mRes.ok)
         throw new Error("Ошибка загрузки данных")
 
-      const [dData, sData, mData] = await Promise.all([
+      const [dData, sData, pData, mData] = await Promise.all([
         dRes.json(),
         sRes.json(),
+        pRes.json(),
         mRes.json(),
       ])
 
       setDistricts(dData)
       setStores(sData)
+      setProducts(pData)
       setMovements(
         (mData as any[]).map((m) => ({ ...m, date: new Date(m.date) }))
       )
     } catch (e: any) {
       console.error(e)
-      setError(e.message)
+      setError(e.message || "Ошибка загрузки данных")
     } finally {
       setLoading(false)
     }
@@ -219,7 +324,7 @@ function useReportsData() {
     fetchData()
   }, [fetchData])
 
-  return { districts, stores, movements, loading, error }
+  return { districts, stores, products, movements, loading, error }
 }
 
 // --- STYLED COMPONENTS ---
@@ -330,7 +435,7 @@ const ReportTable = ({
                         : "text-zinc-500"
                     }`}
                   >
-                    {row.returnRate > 0
+                    {row.salesQty > 0 && row.returnRate > 0
                       ? `${row.returnRate.toFixed(1)}%`
                       : "—"}
                   </TableCell>
@@ -360,14 +465,28 @@ const ReportTable = ({
 // --- MAIN COMPONENT ---
 
 export default function ReportsPage() {
-  const { districts, stores, movements, loading, error } = useReportsData()
+  const { districts, stores, products, movements, loading, error } =
+    useReportsData()
 
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
 
-  const { districtRows, storeRows } = useMemo(
-    () => calculateReportData(movements, districts, stores, dateFrom, dateTo),
-    [movements, districts, stores, dateFrom, dateTo]
+  // сначала считаем финансы по каждому движению (та же логика, что в дашборде)
+  const movementsWithCalculations = useMemo<MovementWithCalculations[]>(
+    () => movements.map((m) => calculateMovementFinancials(m, products)),
+    [movements, products]
+  )
+
+  const { districtRows, storeRows, summary } = useMemo(
+    () =>
+      calculateReportData(
+        movementsWithCalculations,
+        districts,
+        stores,
+        dateFrom,
+        dateTo
+      ),
+    [movementsWithCalculations, districts, stores, dateFrom, dateTo]
   )
 
   const setMonth = (offset: number) => {
@@ -411,7 +530,7 @@ export default function ReportsPage() {
               Аналитические отчёты
             </h1>
             <p className="text-zinc-400 mt-1">
-              Детальная статистика по продажам и эффективности
+              Детальная статистика по продажам, возвратам и акциям
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -441,10 +560,58 @@ export default function ReportsPage() {
           </div>
         </header>
 
+        {/* SUMMARY KPI */}
+        <Card className="bg-zinc-900/40 border-zinc-800">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-zinc-400 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-blue-500" />
+              Итоги за период: {periodLabel}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
+            <div>
+              <div className="text-zinc-500">Выручка</div>
+              <div className="text-lg font-semibold text-zinc-100">
+                {summary.totalRevenue.toLocaleString("ru-RU")} ₸
+              </div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Прибыль (с учётом обменов/бонусов)</div>
+              <div className="text-lg font-semibold text-green-400">
+                {summary.totalProfit.toLocaleString("ru-RU")} ₸
+              </div>
+            </div>
+            <div>
+              <div className="text-zinc-500">
+                Проблемные продажи (возвраты + обмены)
+              </div>
+              <div className="text-lg font-semibold text-zinc-100">
+                {summary.totalIssueQty} шт{" "}
+                {summary.overallReturnRate > 0 && (
+                  <span className="text-sm text-zinc-400">
+                    ({summary.overallReturnRate.toFixed(1)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Бонусы</div>
+              <div className="text-lg font-semibold text-zinc-100">
+                {summary.totalBonusesQty} шт{" "}
+                {summary.overallBonusShare > 0 && (
+                  <span className="text-sm text-zinc-400">
+                    ({summary.overallBonusShare.toFixed(1)}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* FILTERS */}
         <div className="bg-zinc-900/30 border border-zinc-800 p-4 rounded-lg flex flex-wrap items-end gap-4">
           <div className="space-y-2">
-            <Label className="flex items_CENTER gap-2 text-zinc-400">
+            <Label className="flex items-center gap-2 text-zinc-400">
               <Calendar className="h-4 w-4" /> С даты
             </Label>
             <Input
@@ -487,7 +654,7 @@ export default function ReportsPage() {
             <Button
               variant="outline"
               onClick={() => setMonth(1)}
-              className="bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              className="bg-zinc-900 border-зinc-700 text-зinc-300 hover:bg-зinc-800 hover:text-white"
             >
               Прошлый месяц
             </Button>
@@ -511,8 +678,9 @@ export default function ReportsPage() {
           <p className="flex items-center justify-center gap-2">
             <TrendingUp className="h-4 w-4" />
             Выручка считается только по продажам и возвратам.
-            Обмены и бонусы денег не дают и в выручку не попадают.
-            Себестоимость в этом отчёте не учитывается.
+            Обмены, бонусы и списания денег в кассу не приносят, но уменьшают
+            прибыль через себестоимость — поэтому «красивые акции» сразу видно
+            в отчёте.
           </p>
         </div>
       </div>
