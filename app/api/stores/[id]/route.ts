@@ -10,7 +10,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     const body = await req.json()
 
     const name = (body?.name ?? "").trim()
-    const districtId = body?.districtId ?? null  // может быть null (без района)
+    const districtId = body?.districtId ?? null
 
     if (!name) {
       return NextResponse.json(
@@ -21,16 +21,16 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
 
     const rows = await sql`
       UPDATE stores
-      SET 
+      SET
         name = ${name},
         district_id = ${districtId}
-      WHERE id::text = ${id}
+      WHERE id = ${id}::uuid
       RETURNING id, name, district_id
     `
 
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "Магазин не найден" },
+        { error: `Магазин не найден (id: ${id})` },
         { status: 404 }
       )
     }
