@@ -3,48 +3,29 @@ import { sql } from "@/lib/db"
 
 type RouteContext = { params: { id: string } }
 
-// PATCH /api/stores/:id
-// Можно менять name и / или districtId
+// PATCH /api/stores/:id — изменить название и/или район
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
   try {
-    const id = params.id
-    const body = await req.json().catch(() => ({} as any))
+    const { id } = params
+    const body = await req.json()
 
-    const rawName =
-      typeof body?.name === "string" ? body.name.trim() : undefined
+    const name = (body?.name ?? "").trim()
+    const districtId = body?.districtId ?? null  // может быть null (без района)
 
-    // districtId может не передаваться вообще, а может быть null/"none"
-    const rawDistrictId =
-      Object.prototype.hasOwnProperty.call(body, "districtId")
-        ? body.districtId
-        : undefined
-
-    const districtId =
-      rawDistrictId === undefined
-        ? undefined
-        : rawDistrictId === null || rawDistrictId === "none"
-        ? null
-        : String(rawDistrictId)
-
-    if (rawName === undefined && districtId === undefined) {
+    if (!name) {
       return NextResponse.json(
-        { error: "Нет полей для обновления" },
+        { error: "Название магазина обязательно" },
         { status: 400 }
       )
     }
 
-    // name: если не передан — оставляем как есть через COALESCE
-    const nameForSql = rawName ?? null
-
     const rows = await sql`
       UPDATE stores
-      SET
-        name = COALESCE(${nameForSql}, name),
-        district_id = ${
-          districtId === undefined ? sql`district_id` : districtId
-        }
-      WHERE id = ${id}
-      RETURNING id, name, district_id AS "districtId"
+      SET 
+        name = ${name},
+        district_id = ${districtId}
+      WHERE id::text = ${id}
+      RETURNING id, name, district_id
     `
 
     if (rows.length === 0) {
@@ -56,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
 
     return NextResponse.json(rows[0])
   } catch (error) {
-    console.error("PATCH /api/stores/[id] error:", error)
+    console.error("Store PATCH error:", error)
     return NextResponse.json(
       { error: "Не удалось обновить магазин" },
       { status: 500 }
