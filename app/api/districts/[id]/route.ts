@@ -3,10 +3,10 @@ import { sql } from "@/lib/db"
 
 type RouteContext = { params: { id: string } }
 
-// PUT /api/districts/:id — переименование района
+// PUT /api/districts/:id — переименовать район
 export async function PUT(req: NextRequest, { params }: RouteContext) {
   try {
-    const id = params.id
+    const { id } = params
     const body = await req.json()
     const name = (body?.name ?? "").trim()
 
@@ -17,10 +17,11 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
       )
     }
 
+    // КАСТ по text, чтобы не было проблем с uuid
     const rows = await sql`
       UPDATE districts
       SET name = ${name}
-      WHERE id = ${id}
+      WHERE id::text = ${id}
       RETURNING id, name
     `
 
@@ -33,7 +34,7 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
 
     return NextResponse.json(rows[0])
   } catch (error) {
-    console.error("PUT /api/districts/[id] error:", error)
+    console.error("District PUT error:", error)
     return NextResponse.json(
       { error: "Не удалось обновить район" },
       { status: 500 }
@@ -44,16 +45,24 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
 // DELETE /api/districts/:id — удалить район
 export async function DELETE(_req: NextRequest, { params }: RouteContext) {
   try {
-    const id = params.id
+    const { id } = params
 
-    await sql`
+    const rows = await sql`
       DELETE FROM districts
-      WHERE id = ${id}
+      WHERE id::text = ${id}
+      RETURNING id
     `
 
-    return NextResponse.json({ ok: true })
+    if (rows.length === 0) {
+      return NextResponse.json(
+        { error: "Район не найден" },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("DELETE /api/districts/[id] error:", error)
+    console.error("District DELETE error:", error)
     return NextResponse.json(
       { error: "Не удалось удалить район" },
       { status: 500 }
