@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 
-type RouteContext = { params: { id: string } }
+type RouteContext = { params: { id?: string } }
+
+// --- утилита: достаём id надёжно из params или из URL ---
+function getIdFromRequest(req: NextRequest, params: { id?: string }) {
+  if (params?.id) return params.id
+
+  const url = new URL(req.url)
+  const parts = url.pathname.split("/").filter(Boolean)
+  // ... /api/districts/:id  -> берём последний сегмент
+  return parts[parts.length - 1]
+}
 
 // PUT /api/districts/:id — переименование района
-export async function PUT(req: NextRequest, { params }: RouteContext) {
+export async function PUT(req: NextRequest, context: RouteContext) {
   try {
-    const { id } = params
+    const rawId = getIdFromRequest(req, context.params || {})
+    const id = (rawId ?? "").trim()
+
     const body = await req.json()
     const name = (body?.name ?? "").trim()
 
@@ -17,7 +29,13 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
       )
     }
 
-    // ВАЖНО: явно кастуем параметр к uuid
+    if (!id) {
+      return NextResponse.json(
+        { error: "ID района не передан в запросе" },
+        { status: 400 }
+      )
+    }
+
     const rows = await sql`
       UPDATE districts
       SET name = ${name}
@@ -43,9 +61,17 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
 }
 
 // DELETE /api/districts/:id — удаление района
-export async function DELETE(_req: NextRequest, { params }: RouteContext) {
+export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    const { id } = params
+    const rawId = getIdFromRequest(req, context.params || {})
+    const id = (rawId ?? "").trim()
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "ID района не передан в запросе" },
+        { status: 400 }
+      )
+    }
 
     const rows = await sql`
       DELETE FROM districts
