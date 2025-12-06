@@ -207,6 +207,18 @@ function useGeoDirectory() {
     setStores((prev) => [...prev, created])
   }
 
+  const deleteStore = async (id: string) => {
+    const res = await fetch(`/api/stores/${id}`, {
+      method: "DELETE",
+    })
+
+    if (!res.ok) {
+      throw new Error(await res.text())
+    }
+
+    setStores((prev) => prev.filter((s) => s.id !== id))
+  }
+
   return {
     districts,
     stores,
@@ -218,6 +230,7 @@ function useGeoDirectory() {
     updateStoreDistrict,
     updateStoreName,
     createStore,
+    deleteStore,
   }
 }
 
@@ -465,6 +478,7 @@ const StoresCard = ({
   onChangeDistrict,
   onUpdateStoreName,
   onCreateStore,
+  onDeleteStore,
 }: {
   stores: Store[]
   districts: District[]
@@ -474,6 +488,7 @@ const StoresCard = ({
   ) => Promise<void> | void
   onUpdateStoreName: (storeId: string, name: string) => Promise<void> | void
   onCreateStore: (name: string, districtId: string | null) => Promise<void> | void
+  onDeleteStore: (storeId: string) => Promise<void> | void
 }) => {
   const [search, setSearch] = useState("")
   const [busyStoreId, setBusyStoreId] = useState<string | null>(null)
@@ -557,6 +572,19 @@ const StoresCard = ({
     }
   }
 
+  const handleDeleteStore = async (store: StoreWithDistrict) => {
+    const ok = confirm(`Удалить магазин «${store.name}»?`)
+    if (!ok) return
+    try {
+      setBusyStoreId(store.id)
+      await onDeleteStore(store.id)
+    } catch (e: any) {
+      alert(e.message || "Не удалось удалить магазин")
+    } finally {
+      setBusyStoreId(null)
+    }
+  }
+
   return (
     <Card className="border-zinc-800 bg-zinc-900/40">
       <CardHeader className="border-b border-zinc-800/60 pb-4">
@@ -631,7 +659,7 @@ const StoresCard = ({
                 <TableHead className="text-zinc-400 w-[260px]">
                   Район
                 </TableHead>
-                <TableHead className="w-[120px]" />
+                <TableHead className="w-[130px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -671,7 +699,7 @@ const StoresCard = ({
                         <SelectTrigger className="bg-zinc-950 border-zinc-700 text-zinc-100">
                           <SelectValue placeholder="Выберите район" />
                         </SelectTrigger>
-                        <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                        <SelectContent className="bg-zinc-900 border-zinc-800 text-зinc-100">
                           <SelectItem value="none">Без района</SelectItem>
                           {districts.map((d) => (
                             <SelectItem key={d.id} value={d.id}>
@@ -708,15 +736,30 @@ const StoresCard = ({
                           </Button>
                         </div>
                       ) : (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-zinc-400 hover:text-zinc-200"
-                          onClick={() => startEdit(s)}
-                          disabled={busyStoreId === s.id}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-zinc-400 hover:text-zinc-200"
+                            onClick={() => startEdit(s)}
+                            disabled={busyStoreId === s.id}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-red-500 hover:text-red-400"
+                            onClick={() => handleDeleteStore(s)}
+                            disabled={busyStoreId === s.id}
+                          >
+                            {busyStoreId === s.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
@@ -751,11 +794,12 @@ export default function DistrictsPage() {
     updateStoreDistrict,
     updateStoreName,
     createStore,
+    deleteStore,
   } = useGeoDirectory()
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-950 text-zinc-400">
+      <div className="flex h-screen items-center justify-center bg-zinc-950 text-зinc-400">
         <Loader2 className="h-6 w-6 mr-2 animate-spin text-blue-500" />
         Загрузка справочника...
       </div>
@@ -774,22 +818,22 @@ export default function DistrictsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 lg:p-8">
+    <main className="min-h-screen bg-zinc-950 text-зinc-100 p-4 md:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* HEADER */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-6">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-зinc-800 pb-6">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white">
               Районы и магазины
             </h1>
-            <p className="text-zinc-400 mt-1">
+            <p className="text-зinc-400 mt-1">
               Управление районами и привязка магазинов к нужному району
             </p>
           </div>
           <Button
             variant="outline"
             asChild
-            className="bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800 hover:text-white"
+            className="bg-зinc-900 border-зinc-700 text-зinc-200 hover:bg-зinc-800 hover:text-white"
           >
             <Link href="/">
               <ArrowLeft className="mr-2 h-4 w-4" /> Назад в дашборд
@@ -812,6 +856,7 @@ export default function DistrictsPage() {
             onChangeDistrict={updateStoreDistrict}
             onUpdateStoreName={updateStoreName}
             onCreateStore={createStore}
+            onDeleteStore={deleteStore}
           />
         </div>
       </div>
