@@ -184,6 +184,27 @@ function useGeoDirectory() {
     }
   }
 
+  const createStore = async (name: string, districtId: string | null) => {
+    const payload = {
+      name: name.trim(),
+      districtId,
+    }
+    if (!payload.name) return
+
+    const res = await fetch("/api/stores", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    if (!res.ok) {
+      throw new Error(await res.text())
+    }
+
+    const created: Store = await res.json()
+    setStores((prev) => [...prev, created])
+  }
+
   return {
     districts,
     stores,
@@ -194,6 +215,7 @@ function useGeoDirectory() {
     deleteDistrict,
     updateStoreDistrict,
     updateStoreName,
+    createStore,
   }
 }
 
@@ -440,6 +462,7 @@ const StoresCard = ({
   districts,
   onChangeDistrict,
   onUpdateStoreName,
+  onCreateStore,
 }: {
   stores: Store[]
   districts: District[]
@@ -448,11 +471,18 @@ const StoresCard = ({
     districtId: string | null
   ) => Promise<void> | void
   onUpdateStoreName: (storeId: string, name: string) => Promise<void> | void
+  onCreateStore: (name: string, districtId: string | null) => Promise<void> | void
 }) => {
   const [search, setSearch] = useState("")
   const [busyStoreId, setBusyStoreId] = useState<string | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
+
+  const [newStoreName, setNewStoreName] = useState("")
+  const [newStoreDistrictId, setNewStoreDistrictId] = useState<string | "none">(
+    "none"
+  )
+  const [busyNewStore, setBusyNewStore] = useState(false)
 
   const districtMap = useMemo(
     () => new Map(districts.map((d) => [d.id, d.name])),
@@ -508,6 +538,24 @@ const StoresCard = ({
     }
   }
 
+  const handleCreateStore = async () => {
+    const name = newStoreName.trim()
+    if (!name) return
+    const districtId =
+      newStoreDistrictId === "none" ? null : newStoreDistrictId
+
+    try {
+      setBusyNewStore(true)
+      await onCreateStore(name, districtId)
+      setNewStoreName("")
+      setNewStoreDistrictId("none")
+    } catch (e: any) {
+      alert(e.message || "Не удалось создать магазин")
+    } finally {
+      setBusyNewStore(false)
+    }
+  }
+
   return (
     <Card className="border-zinc-800 bg-zinc-900/40">
       <CardHeader className="border-b border-zinc-800/60 pb-4">
@@ -517,6 +565,52 @@ const StoresCard = ({
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
+        {/* Добавление магазина */}
+        <div className="flex flex-col gap-2 md:flex-row md:items-end">
+          <div className="flex-1 space-y-1.5">
+            <span className="text-xs text-zinc-500">Новый магазин</span>
+            <Input
+              placeholder="Название магазина"
+              value={newStoreName}
+              onChange={(e) => setNewStoreName(e.target.value)}
+              className="bg-zinc-950 border-zinc-700 text-zinc-100"
+            />
+          </div>
+          <div className="w-full md:w-60 space-y-1.5">
+            <span className="text-xs text-zinc-500">Район (опционально)</span>
+            <Select
+              value={newStoreDistrictId}
+              onValueChange={(v) => setNewStoreDistrictId(v)}
+            >
+              <SelectTrigger className="bg-zinc-950 border-zinc-700 text-zinc-100">
+                <SelectValue placeholder="Выберите район" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-100">
+                <SelectItem value="none">Без района</SelectItem>
+                {districts.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            onClick={handleCreateStore}
+            disabled={!newStoreName.trim() || busyNewStore}
+            className="md:ml-2 min-w-[120px] bg-blue-600 hover:bg-blue-500"
+          >
+            {busyNewStore ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-1" /> Добавить
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Поиск */}
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
           <Input
@@ -527,6 +621,7 @@ const StoresCard = ({
           />
         </div>
 
+        {/* Таблица магазинов */}
         <div className="border border-zinc-800 rounded-lg max-h-[480px] overflow-y-auto">
           <Table>
             <TableHeader className="bg-zinc-900/70 sticky top-0 z-10">
@@ -654,6 +749,7 @@ export default function DistrictsPage() {
     deleteDistrict,
     updateStoreDistrict,
     updateStoreName,
+    createStore,
   } = useGeoDirectory()
 
   if (loading) {
@@ -714,6 +810,7 @@ export default function DistrictsPage() {
             districts={districts}
             onChangeDistrict={updateStoreDistrict}
             onUpdateStoreName={updateStoreName}
+            onCreateStore={createStore}
           />
         </div>
       </div>
