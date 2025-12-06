@@ -47,7 +47,7 @@ type StoreWithDistrict = Store & {
   districtName?: string | null
 }
 
-// --- HOOK: LOAD DATA ---
+// --- HOOK: LOAD & MUTATE DATA ---
 
 function useGeoDirectory() {
   const [districts, setDistricts] = useState<District[]>([])
@@ -65,12 +65,14 @@ function useGeoDirectory() {
         fetch("/api/stores"),
       ])
 
-      if (!dRes.ok || !sRes.ok) throw new Error("Ошибка загрузки данных")
+      if (!dRes.ok || !sRes.ok) {
+        throw new Error("Ошибка загрузки данных")
+      }
 
       const [dData, sData] = await Promise.all([dRes.json(), sRes.json()])
 
-      setDistricts(dData)
-      setStores(sData)
+      setDistricts(dData as District[])
+      setStores(sData as Store[])
     } catch (e: any) {
       console.error(e)
       setError(e.message || "Не удалось загрузить справочник")
@@ -83,7 +85,7 @@ function useGeoDirectory() {
     fetchData()
   }, [fetchData])
 
-  // --- API actions ---
+  // --- API: Районы ---
 
   const createDistrict = async (name: string) => {
     const payload = { name: name.trim() }
@@ -118,7 +120,7 @@ function useGeoDirectory() {
     }
 
     setDistricts((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, name: payload.name } : d))
+      prev.map((d) => (d.id === id ? { ...d, name: payload.name } : d)),
     )
   }
 
@@ -134,19 +136,23 @@ function useGeoDirectory() {
     setDistricts((prev) => prev.filter((d) => d.id !== id))
     // открепляем магазины от удалённого района
     setStores((prev) =>
-      prev.map((s) => (s.districtId === id ? { ...s, districtId: null } : s))
+      prev.map((s) =>
+        s.districtId === id ? { ...s, districtId: null } : s,
+      ),
     )
   }
 
+  // --- API: Магазины ---
+
   const updateStoreDistrict = async (
     storeId: string,
-    districtId: string | null
+    districtId: string | null,
   ) => {
-    // оптимистично обновляем
+    // оптимистичное обновление
     setStores((prev) =>
       prev.map((s) =>
-        s.id === storeId ? { ...s, districtId: districtId || null } : s
-      )
+        s.id === storeId ? { ...s, districtId: districtId || null } : s,
+      ),
     )
 
     const res = await fetch(`/api/stores/${storeId}`, {
@@ -156,7 +162,7 @@ function useGeoDirectory() {
     })
 
     if (!res.ok) {
-      // откатываем, если ошибка
+      // откат, если ошибка
       await fetchData()
       throw new Error(await res.text())
     }
@@ -168,7 +174,7 @@ function useGeoDirectory() {
 
     // оптимистично меняем имя
     setStores((prev) =>
-      prev.map((s) => (s.id === storeId ? { ...s, name: payload.name } : s))
+      prev.map((s) => (s.id === storeId ? { ...s, name: payload.name } : s)),
     )
 
     const res = await fetch(`/api/stores/${storeId}`, {
@@ -219,7 +225,7 @@ function useGeoDirectory() {
   }
 }
 
-// --- SUB COMPONENT: DISTRICTS ---
+// --- CARD: РАЙОНЫ ---
 
 const DistrictsCard = ({
   districts,
@@ -296,8 +302,7 @@ const DistrictsCard = ({
   const handleDelete = async (d: DistrictWithStats) => {
     if (d.storeCount > 0) {
       const ok = confirm(
-        `К району «${d.name}» привязано магазинов: ${d.storeCount}.\n` +
-          "Удалить район и открепить магазины?"
+        `К району «${d.name}» привязано магазинов: ${d.storeCount}.\nУдалить район и открепить магазины?`,
       )
       if (!ok) return
     } else {
@@ -323,7 +328,7 @@ const DistrictsCard = ({
           Районы
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-4 space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {/* Добавление района */}
         <div className="flex gap-2">
           <Input
@@ -341,19 +346,19 @@ const DistrictsCard = ({
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
-                <Plus className="h-4 w-4 mr-1" /> Добавить
+                <Plus className="mr-1 h-4 w-4" /> Добавить
               </>
             )}
           </Button>
         </div>
 
         {/* Список районов */}
-        <div className="border border-zinc-800 rounded-lg max-h-[420px] overflow-y-auto">
+        <div className="max-h-[420px] overflow-y-auto rounded-lg border border-zinc-800">
           <Table>
-            <TableHeader className="bg-zinc-900/70 sticky top-0 z-10">
+            <TableHeader className="sticky top-0 z-10 bg-zinc-900/70">
               <TableRow className="border-zinc-800">
                 <TableHead className="text-zinc-400">Район</TableHead>
-                <TableHead className="text-zinc-400 w-[110px] text-center">
+                <TableHead className="w-[110px] text-center text-zinc-400">
                   Магазинов
                 </TableHead>
                 <TableHead className="w-[130px]" />
@@ -384,12 +389,12 @@ const DistrictsCard = ({
                           autoFocus
                         />
                       ) : (
-                        <span className="text-zinc-100 font-medium">
+                        <span className="font-medium text-zinc-100">
                           {d.name}
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-center text-zinc-400 text-sm">
+                    <TableCell className="text-center text-sm text-zinc-400">
                       {d.storeCount}
                     </TableCell>
                     <TableCell className="text-right">
@@ -425,6 +430,7 @@ const DistrictsCard = ({
                             variant="ghost"
                             className="h-8 w-8 text-zinc-400 hover:text-zinc-200"
                             onClick={() => startEdit(d)}
+                            disabled={busyId === d.id}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -455,7 +461,7 @@ const DistrictsCard = ({
   )
 }
 
-// --- SUB COMPONENT: STORES ---
+// --- CARD: МАГАЗИНЫ ---
 
 const StoresCard = ({
   stores,
@@ -468,7 +474,7 @@ const StoresCard = ({
   districts: District[]
   onChangeDistrict: (
     storeId: string,
-    districtId: string | null
+    districtId: string | null,
   ) => Promise<void> | void
   onUpdateStoreName: (storeId: string, name: string) => Promise<void> | void
   onCreateStore: (name: string, districtId: string | null) => Promise<void> | void
@@ -479,19 +485,18 @@ const StoresCard = ({
   const [editName, setEditName] = useState("")
 
   const [newStoreName, setNewStoreName] = useState("")
-  const [newStoreDistrictId, setNewStoreDistrictId] = useState<string | "none">(
-    "none"
-  )
+  const [newStoreDistrictId, setNewStoreDistrictId] =
+    useState<string>("none")
   const [busyNewStore, setBusyNewStore] = useState(false)
 
   const districtMap = useMemo(
     () => new Map(districts.map((d) => [d.id, d.name])),
-    [districts]
+    [districts],
   )
 
   const data: StoreWithDistrict[] = useMemo(() => {
     const filtered = stores.filter((s) =>
-      s.name.toLowerCase().includes(search.toLowerCase())
+      s.name.toLowerCase().includes(search.toLowerCase()),
     )
     return filtered
       .map((s) => ({
@@ -501,7 +506,7 @@ const StoresCard = ({
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [stores, search, districtMap])
 
-  const handleChange = async (storeId: string, value: string) => {
+  const handleChangeDistrict = async (storeId: string, value: string) => {
     const districtId = value === "none" ? null : value
     try {
       setBusyStoreId(storeId)
@@ -564,7 +569,7 @@ const StoresCard = ({
           Магазины и привязка к районам
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-4 space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {/* Добавление магазина */}
         <div className="flex flex-col gap-2 md:flex-row md:items-end">
           <div className="flex-1 space-y-1.5">
@@ -576,7 +581,7 @@ const StoresCard = ({
               className="bg-zinc-950 border-zinc-700 text-zinc-100"
             />
           </div>
-          <div className="w-full md:w-60 space-y-1.5">
+          <div className="w-full space-y-1.5 md:w-60">
             <span className="text-xs text-zinc-500">Район (опционально)</span>
             <Select
               value={newStoreDistrictId}
@@ -598,13 +603,13 @@ const StoresCard = ({
           <Button
             onClick={handleCreateStore}
             disabled={!newStoreName.trim() || busyNewStore}
-            className="md:ml-2 min-w-[120px] bg-blue-600 hover:bg-blue-500"
+            className="min-w-[120px] bg-blue-600 hover:bg-blue-500 md:ml-2"
           >
             {busyNewStore ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
-                <Plus className="h-4 w-4 mr-1" /> Добавить
+                <Plus className="mr-1 h-4 w-4" /> Добавить
               </>
             )}
           </Button>
@@ -612,22 +617,22 @@ const StoresCard = ({
 
         {/* Поиск */}
         <div className="relative">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
           <Input
             placeholder="Поиск магазина..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 bg-zinc-950 border-zinc-700 text-zinc-100"
+            className="bg-zinc-950 pl-8 border-zinc-700 text-zinc-100"
           />
         </div>
 
         {/* Таблица магазинов */}
-        <div className="border border-zinc-800 rounded-lg max-h-[480px] overflow-y-auto">
+        <div className="max-h-[480px] overflow-y-auto rounded-lg border border-zinc-800">
           <Table>
-            <TableHeader className="bg-zinc-900/70 sticky top-0 z-10">
+            <TableHeader className="sticky top-0 z-10 bg-zinc-900/70">
               <TableRow className="border-zinc-800">
                 <TableHead className="text-zinc-400">Магазин</TableHead>
-                <TableHead className="text-zinc-400 w-[260px]">
+                <TableHead className="w-[260px] text-zinc-400">
                   Район
                 </TableHead>
                 <TableHead className="w-[120px]" />
@@ -649,7 +654,7 @@ const StoresCard = ({
                     key={s.id}
                     className="border-zinc-800/70 hover:bg-zinc-900/60"
                   >
-                    <TableCell className="text-zinc-100 font-medium align-middle">
+                    <TableCell className="align-middle font-medium text-zinc-100">
                       {editId === s.id ? (
                         <Input
                           value={editName}
@@ -664,7 +669,7 @@ const StoresCard = ({
                     <TableCell>
                       <Select
                         value={s.districtId ?? "none"}
-                        onValueChange={(v) => handleChange(s.id, v)}
+                        onValueChange={(v) => handleChangeDistrict(s.id, v)}
                         disabled={busyStoreId === s.id || districts.length === 0}
                       >
                         <SelectTrigger className="bg-zinc-950 border-zinc-700 text-zinc-100">
@@ -726,7 +731,7 @@ const StoresCard = ({
         </div>
 
         {districts.length === 0 && (
-          <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-900/10 border border-amber-900/40 px-3 py-2 rounded-md">
+          <div className="flex items-center gap-2 rounded-md border border-amber-900/40 bg-amber-900/10 px-3 py-2 text-xs text-amber-400">
             <AlertTriangle className="h-3.5 w-3.5" />
             Сначала добавьте хотя бы один район, чтобы привязывать магазины.
           </div>
@@ -755,7 +760,7 @@ export default function DistrictsPage() {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-950 text-zinc-400">
-        <Loader2 className="h-6 w-6 mr-2 animate-spin text-blue-500" />
+        <Loader2 className="mr-2 h-6 w-6 animate-spin text-blue-500" />
         Загрузка справочника...
       </div>
     )
@@ -763,7 +768,7 @@ export default function DistrictsPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col h-screen items-center justify-center bg-zinc-950 text-red-400 gap-3">
+      <div className="flex h-screen flex-col items-center justify-center gap-3 bg-zinc-950 text-red-400">
         <p>Ошибка: {error}</p>
         <Button variant="outline" onClick={() => window.location.reload()}>
           Повторить
@@ -773,15 +778,15 @@ export default function DistrictsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-6 lg:p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <main className="min-h-screen bg-zinc-950 p-4 text-zinc-100 md:p-6 lg:p-8">
+      <div className="mx-auto max-w-6xl space-y-8">
         {/* HEADER */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-6">
+        <header className="flex flex-col justify-between gap-4 border-b border-zinc-800 pb-6 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white">
               Районы и магазины
             </h1>
-            <p className="text-zinc-400 mt-1">
+            <p className="mt-1 text-zinc-400">
               Управление районами и привязка магазинов к нужному району
             </p>
           </div>
@@ -797,7 +802,7 @@ export default function DistrictsPage() {
         </header>
 
         {/* CONTENT */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <DistrictsCard
             districts={districts}
             stores={stores}
